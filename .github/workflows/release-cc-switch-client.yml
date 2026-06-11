@@ -61,8 +61,6 @@ jobs:
       - name: Build cc-switch-server
         run: |
           ${{ matrix.use-cross && 'cross' || 'cargo' }} build -p cc-switch-server --release --target ${{ matrix.target }}
-        env:
-          # cross uses Docker; no special env needed
 
       - name: Prepare binary
         shell: bash
