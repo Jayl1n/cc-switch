@@ -1,0 +1,34 @@
+{
+  "name": "cc-switch-client",
+  "version": "0.1.0",
+  "description": "Bun/Node.js client for cc-switch-server — headless AI coding tool proxy with provider failover, model mapping, and usage stats",
+  "main": "index.ts",
+  "types": "index.ts",
+  "license": "MIT",
+  "keywords": [
+    "cc-switch",
+    "claude",
+    "codex",
+    "gemini",
+    "ai-proxy",
+    "provider-failover"
+  ],
+  "optionalDependencies": {
+    "cc-switch-client-darwin-arm64": "file:../cc-switch-client-darwin-arm64",
+    "cc-switch-client-darwin-x64": "file:../cc-switch-client-darwin-x64",
+    "cc-switch-client-linux-x64": "file:../cc-switch-client-linux-x64",
+    "cc-switch-client-linux-arm64": "file:../cc-switch-client-linux-arm64",
+    "cc-switch-client-win32-x64": "file:../cc-switch-client-win32-x64"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "files": [
+    "index.ts",
+    "detect-platform.ts"
+  ],
+  "scripts": {
+    "test": "bun test",
+    "prepublishOnly": "node scripts/prepublish.js"
+  }
+}

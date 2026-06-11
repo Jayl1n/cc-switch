@@ -1,0 +1,7 @@
+[workspace]
+members = [
+    "cc-switch-core",
+    "cc-switch-server",
+    "src-tauri",
+]
+resolver = "2"

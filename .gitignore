@@ -30,3 +30,18 @@ copilot-api
 CODEBUDDY.md
 .github
 mainWindow.js
+
+# Rust build artifacts
+target/
+Cargo.lock
+
+# npm platform package binaries (rebuilt from CI)
+cc-switch-server/npm/cc-switch-client-*/bin/
+
+# npm node_modules (in case)
+cc-switch-server/npm/**/node_modules/
+cc-switch-server/npm/**/bun.lock
+
+# temp files
+11111
+hhhhh

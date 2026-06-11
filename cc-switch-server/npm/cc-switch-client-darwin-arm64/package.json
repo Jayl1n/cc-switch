@@ -1,0 +1,9 @@
+{
+  "name": "cc-switch-client-darwin-arm64",
+  "version": "0.1.0",
+  "description": "cc-switch-server binary for macOS ARM64",
+  "license": "MIT",
+  "os": ["darwin"],
+  "cpu": ["arm64"],
+  "files": ["bin"]
+}
