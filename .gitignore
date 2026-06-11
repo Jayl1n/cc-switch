@@ -28,7 +28,8 @@ flatpak-repo/
 copilot-api
 .history
 CODEBUDDY.md
-.github
+.github/
+!.github/workflows/
 mainWindow.js
 
 # Rust build artifacts

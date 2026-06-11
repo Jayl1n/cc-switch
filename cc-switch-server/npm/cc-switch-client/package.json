@@ -14,11 +14,11 @@
     "provider-failover"
   ],
   "optionalDependencies": {
-    "cc-switch-client-darwin-arm64": "file:../cc-switch-client-darwin-arm64",
-    "cc-switch-client-darwin-x64": "file:../cc-switch-client-darwin-x64",
-    "cc-switch-client-linux-x64": "file:../cc-switch-client-linux-x64",
-    "cc-switch-client-linux-arm64": "file:../cc-switch-client-linux-arm64",
-    "cc-switch-client-win32-x64": "file:../cc-switch-client-win32-x64"
+    "cc-switch-client-darwin-arm64": "0.1.0",
+    "cc-switch-client-darwin-x64": "0.1.0",
+    "cc-switch-client-linux-x64": "0.1.0",
+    "cc-switch-client-linux-arm64": "0.1.0",
+    "cc-switch-client-win32-x64": "0.1.0"
   },
   "devDependencies": {
     "@types/bun": "latest"

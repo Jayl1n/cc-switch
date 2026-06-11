@@ -1,0 +1,220 @@
+name: Release cc-switch-client
+
+on:
+  push:
+    tags:
+      - 'cc-switch-client-v*'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: cc-switch-client-release-${{ github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: macos-14
+            target: aarch64-apple-darwin
+            platform: darwin-arm64
+          - os: macos-14
+            target: x86_64-apple-darwin
+            platform: darwin-x64
+          - os: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            platform: linux-x64
+          - os: ubuntu-22.04
+            target: aarch64-unknown-linux-gnu
+            platform: linux-arm64
+            use-cross: true
+          - os: windows-2022
+            target: x86_64-pc-windows-msvc
+            platform: win32-x64
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install cross (for Linux ARM64)
+        if: matrix.use-cross
+        run: cargo install cross --locked
+
+      - name: Cache Cargo
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-${{ matrix.target }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-${{ matrix.target }}-cargo-
+
+      - name: Build cc-switch-server
+        run: |
+          ${{ matrix.use-cross && 'cross' || 'cargo' }} build -p cc-switch-server --release --target ${{ matrix.target }}
+        env:
+          # cross uses Docker; no special env needed
+
+      - name: Prepare binary
+        shell: bash
+        run: |
+          mkdir -p release-assets
+          EXT="${{ matrix.platform == 'win32-x64' && '.exe' || '' }}"
+          SRC="target/${{ matrix.target }}/release/cc-switch-server${EXT}"
+          if [ ! -f "$SRC" ]; then
+            SRC="target/release/cc-switch-server${EXT}"
+          fi
+          DST="release-assets/cc-switch-server-${{ matrix.platform }}${EXT}"
+          cp "$SRC" "$DST"
+          chmod +x "$DST"
+          echo "Binary: $(du -h "$DST" | cut -f1)"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: binary-${{ matrix.platform }}
+          path: release-assets/*
+          if-no-files-found: error
+
+  publish:
+    name: Publish to npm
+    runs-on: ubuntu-22.04
+    needs: build
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Download all binaries
+        uses: actions/download-artifact@v8
+        with:
+          pattern: binary-*
+          path: downloaded-binaries
+          merge-multiple: true
+
+      - name: Place binaries into npm packages
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "=== Downloaded binaries ==="
+          ls -la downloaded-binaries/
+
+          # Extract version from tag: cc-switch-client-v0.1.0 → 0.1.0
+          VERSION="${GITHUB_REF_NAME#cc-switch-client-v}"
+          echo "Version: $VERSION"
+
+          NPM_DIR="cc-switch-server/npm"
+
+          # Map binary files to platform package dirs
+          # cc-switch-server-darwin-arm64 → cc-switch-client-darwin-arm64/bin/cc-switch-server
+          for f in downloaded-binaries/cc-switch-server-*; do
+            filename=$(basename "$f")
+            # Extract platform: cc-switch-server-darwin-arm64 → darwin-arm64
+            platform="${filename#cc-switch-server-}"
+            platform="${platform%.exe}"
+
+            pkg_dir="$NPM_DIR/cc-switch-client-${platform}/bin"
+            mkdir -p "$pkg_dir"
+
+            ext=""
+            [[ "$platform" == "win32-x64" ]] && ext=".exe"
+
+            cp "$f" "$pkg_dir/cc-switch-server${ext}"
+            chmod +x "$pkg_dir/cc-switch-server${ext}"
+            echo "  ✅ $platform → $pkg_dir/cc-switch-server${ext}"
+          done
+
+      - name: Update version in all package.json
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="${GITHUB_REF_NAME#cc-switch-client-v}"
+          NPM_DIR="cc-switch-server/npm"
+
+          # Update version for all platform packages + main package
+          for pkg_dir in "$NPM_DIR"/cc-switch-client*; do
+            node -e "
+              const fs = require('fs');
+              const p = '$pkg_dir/package.json';
+              const pkg = JSON.parse(fs.readFileSync(p, 'utf8'));
+              pkg.version = '$VERSION';
+              if (pkg.optionalDependencies) {
+                for (const dep of Object.keys(pkg.optionalDependencies)) {
+                  if (dep.startsWith('cc-switch-client-')) {
+                    pkg.optionalDependencies[dep] = '$VERSION';
+                  }
+                }
+              }
+              fs.writeFileSync(p, JSON.stringify(pkg, null, 2) + '\n');
+            "
+            echo "  Updated: $(basename "$pkg_dir")@$VERSION"
+          done
+
+      - name: Verify packages
+        shell: bash
+        run: |
+          set -euo pipefail
+          NPM_DIR="cc-switch-server/npm"
+          echo "=== Package contents ==="
+          for pkg_dir in "$NPM_DIR"/cc-switch-client-*; do
+            name=$(node -e "console.log(require('$pkg_dir/package.json').name)")
+            version=$(node -e "console.log(require('$pkg_dir/package.json').version)")
+            binary=$(find "$pkg_dir/bin" -type f 2>/dev/null | head -1)
+            if [ -n "$binary" ]; then
+              echo "  ✅ $name@$version → $(du -h "$binary" | cut -f1)"
+            else
+              echo "  ⏭️  $name@$version → no binary (skipped)"
+            fi
+          done
+
+      - name: Publish platform packages to npm
+        shell: bash
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          set -euo pipefail
+          NPM_DIR="cc-switch-server/npm"
+
+          # Publish each platform package that has a binary
+          for pkg_dir in "$NPM_DIR"/cc-switch-client-*; do
+            if find "$pkg_dir/bin" -type f 2>/dev/null | head -1 | grep -q .; then
+              name=$(node -e "console.log(require('$pkg_dir/package.json').name)")
+              echo "Publishing $name..."
+              (cd "$pkg_dir" && npm publish --access public) || echo "WARN: Failed to publish $name"
+            fi
+          done
+
+      - name: Publish main package to npm
+        shell: bash
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          set -euo pipefail
+          cd cc-switch-server/npm/cc-switch-client
+          echo "Publishing cc-switch-client..."
+          npm publish --access public
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: cc-switch-client ${{ github.ref_name }}
+          files: downloaded-binaries/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
