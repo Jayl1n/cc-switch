@@ -189,15 +189,25 @@ jobs:
         run: |
           set -euo pipefail
           NPM_DIR="cc-switch-server/npm"
+          FAILED=0
 
-          # Publish each platform package that has a binary
+          # Publish each platform package that has a binary.
+          # 之前 `|| echo WARN` 会掩盖 EOTP/2FA 等失败，现在改为逐个尝试、任一失败则标红退出。
           for pkg_dir in "$NPM_DIR"/cc-switch-client-*; do
             if find "$pkg_dir/bin" -type f 2>/dev/null | head -1 | grep -q .; then
               name=$(node -e "console.log(JSON.parse(require('fs').readFileSync('$pkg_dir/package.json','utf8')).name)")
               echo "Publishing $name..."
-              (cd "$pkg_dir" && npm publish --access public) || echo "WARN: Failed to publish $name"
+              if ! (cd "$pkg_dir" && npm publish --access public); then
+                echo "::error::Failed to publish $name"
+                FAILED=1
+              fi
             fi
           done
+
+          if [ "$FAILED" -ne 0 ]; then
+            echo "::error::One or more platform packages failed to publish"
+            exit 1
+          fi
 
       - name: Publish main package to npm
         shell: bash
