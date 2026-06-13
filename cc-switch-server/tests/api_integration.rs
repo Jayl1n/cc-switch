@@ -160,3 +160,50 @@ async fn skills_uninstall_missing_returns_error() {
         .unwrap();
     assert_eq!(resp.status(), 500);
 }
+
+#[tokio::test]
+#[serial]
+async fn skills_check_updates_returns_array() {
+    let srv = spawn_api().await;
+    let client = reqwest::Client::new();
+    let resp = client
+        .post(format!("{}/api/v1/skills/check-updates", srv.base_url))
+        .send()
+        .await
+        .unwrap();
+    // 无网络时 check_updates 内部 catch 错误返回空 Vec（见 skill.rs:916-919）→ 200
+    assert_eq!(resp.status(), 200);
+    assert!(resp.json::<serde_json::Value>().await.unwrap().is_array());
+}
+
+#[tokio::test]
+#[serial]
+async fn skills_search_accepts_query() {
+    let srv = spawn_api().await;
+    let client = reqwest::Client::new();
+    let resp = client
+        .post(format!("{}/api/v1/skills/search", srv.base_url))
+        .json(&serde_json::json!({ "query": "pdf", "limit": 5, "offset": 0 }))
+        .send()
+        .await;
+    // 外网不可用时可能超时/500，只断言端点存在（非 404）
+    if let Ok(r) = resp {
+        assert_ne!(r.status().as_u16(), 404);
+    }
+}
+
+#[tokio::test]
+#[serial]
+async fn skills_migrate_storage_idempotent() {
+    let srv = spawn_api().await;
+    let client = reqwest::Client::new();
+    let resp = client
+        .post(format!("{}/api/v1/skills/migrate-storage", srv.base_url))
+        // SkillStorageLocation serde rename_all = "snake_case" → "cc_switch"/"unified"
+        .json(&serde_json::json!({ "target": "cc_switch" }))
+        .send()
+        .await
+        .unwrap();
+    // 目标==当前（default CcSwitch）时 migrate_storage 直接返回 0 迁移（skill.rs:1157）
+    assert_eq!(resp.status(), 200);
+}
