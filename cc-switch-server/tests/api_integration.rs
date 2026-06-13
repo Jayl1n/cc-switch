@@ -54,3 +54,15 @@ async fn health_returns_ok() {
     assert_eq!(resp.status(), 200);
     assert_eq!(resp.text().await.unwrap(), "ok");
 }
+
+#[tokio::test]
+#[serial]
+async fn skills_list_returns_array() {
+    let srv = spawn_api().await;
+    let resp = reqwest::get(format!("{}/api/v1/skills", srv.base_url))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 200);
+    let body: serde_json::Value = resp.json().await.unwrap();
+    assert!(body.is_array(), "expected array, got: {body}");
+}
