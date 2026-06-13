@@ -99,3 +99,35 @@ async fn skill_repos_returns_array() {
     assert_eq!(resp.status(), 200);
     assert!(resp.json::<serde_json::Value>().await.unwrap().is_array());
 }
+
+#[tokio::test]
+#[serial]
+#[ignore = "requires network: downloads a real github repo"]
+async fn skills_install_creates_entry() {
+    let srv = spawn_api().await;
+    // 用一个真实存在、稳定的小仓库验证整条下载→解压→入库→同步链路
+    let body = serde_json::json!({
+        "skill": {
+            "key": "anthropics/skills:pdf",
+            "name": "pdf",
+            "description": "",
+            "directory": "pdf",
+            "repoOwner": "anthropics",
+            "repoName": "skills",
+            "repoBranch": "main"
+        },
+        "app": "claude"
+    });
+    let client = reqwest::Client::new();
+    let resp = client
+        .post(format!("{}/api/v1/skills/install", srv.base_url))
+        .json(&body)
+        .send()
+        .await
+        .unwrap();
+    let status = resp.status();
+    if !status.is_success() {
+        eprintln!("install resp: {}", resp.text().await.unwrap());
+    }
+    assert_eq!(status, 200);
+}

@@ -1,17 +1,19 @@
 //! Skill 管理端点。薄转发到 cc_switch_core::services::skill::SkillService。
 
 use axum::extract::{Path, State};
-use axum::routing::get;
+use axum::routing::{get, post};
 use axum::{Json, Router};
+use serde::Deserialize;
 
-use cc_switch_core::app_config::{InstalledSkill, UnmanagedSkill};
-use cc_switch_core::services::skill::{SkillBackupEntry, SkillRepo, SkillService};
+use cc_switch_core::app_config::{AppType, InstalledSkill, UnmanagedSkill};
+use cc_switch_core::services::skill::{DiscoverableSkill, SkillBackupEntry, SkillRepo, SkillService};
 
 use super::{ApiResult, ApiState};
 
 pub fn routes() -> Router<ApiState> {
     Router::new()
         .route("/", get(list))
+        .route("/install", post(install))
         .route("/unmanaged", get(scan_unmanaged))
         .route("/backups", get(list_backups))
 }
@@ -22,6 +24,22 @@ async fn list(State(state): State<ApiState>) -> ApiResult<Json<Vec<InstalledSkil
         .await
         .map_err(anyhow::Error::from)??;
     Ok(Json(skills))
+}
+
+#[derive(Deserialize)]
+struct InstallRequest {
+    skill: DiscoverableSkill,
+    app: AppType,
+}
+
+async fn install(
+    State(state): State<ApiState>,
+    Json(req): Json<InstallRequest>,
+) -> ApiResult<Json<InstalledSkill>> {
+    let db = state.app_state.db.clone();
+    let svc = SkillService::new();
+    let installed = svc.install(&db, &req.skill, &req.app).await?;
+    Ok(Json(installed))
 }
 
 async fn scan_unmanaged(State(state): State<ApiState>) -> ApiResult<Json<Vec<UnmanagedSkill>>> {
