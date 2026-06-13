@@ -25,6 +25,12 @@ tower-http = { version = "0.5", features = ["cors", "trace"] }
 anyhow = "1.0"
 thiserror = "2.0"
 
+[target.'cfg(target_os = "linux")'.dependencies]
+# CI 用 cross 容器交叉编译 Linux ARM64 时，容器缺 target 架构的 libssl-dev，
+# 用 vendored feature 让 openssl-sys 从源码静态编译，免系统 pkg-config 依赖。
+# (feature unification 会把 vendored 传递给 reqwest native-tls 的 openssl-sys)
+openssl-sys = { version = "0.9", features = ["vendored"] }
+
 [dev-dependencies]
 reqwest = { version = "0.12", features = ["json"] }
 tempfile = "3"
