@@ -25,7 +25,8 @@
   },
   "files": [
     "index.ts",
-    "detect-platform.ts"
+    "detect-platform.ts",
+    "CHANGELOG.md"
   ],
   "scripts": {
     "test": "bun test",
