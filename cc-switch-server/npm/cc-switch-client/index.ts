@@ -59,6 +59,127 @@ export interface ProxyInfo {
   port: number;
   started_at: string;
   takeover: boolean;
+  /** 管理 API 端口（/api/v1/），由 server 启动 JSON 提供 */
+  mgmtPort: number;
+}
+
+// ── Skill / MCP 类型（镜像 cc-switch-core 的 serde camelCase 输出）──
+
+export interface SkillApps {
+  claude: boolean;
+  codex: boolean;
+  gemini: boolean;
+  opencode: boolean;
+  hermes: boolean;
+}
+
+export interface InstalledSkill {
+  id: string;
+  name: string;
+  description?: string;
+  directory: string;
+  repoOwner?: string;
+  repoName?: string;
+  repoBranch?: string;
+  readmeUrl?: string;
+  apps: SkillApps;
+  installedAt: number;
+  contentHash?: string;
+  updatedAt: number;
+}
+
+export interface UnmanagedSkill {
+  directory: string;
+  name: string;
+  description?: string;
+  foundIn: string[];
+  path: string;
+}
+
+export interface SkillBackupEntry {
+  backupId: string;
+  backupPath: string;
+  createdAt: number;
+  skill: InstalledSkill;
+}
+
+export interface SkillRepo {
+  owner: string;
+  name: string;
+  branch: string;
+  enabled: boolean;
+}
+
+export interface DiscoverableSkill {
+  key: string;
+  name: string;
+  description: string;
+  directory: string;
+  readmeUrl?: string;
+  repoOwner: string;
+  repoName: string;
+  repoBranch: string;
+}
+
+export interface SkillUpdateInfo {
+  id: string;
+  name: string;
+  currentHash?: string;
+  remoteHash: string;
+}
+
+export interface SkillUninstallResult {
+  backupPath?: string;
+}
+
+export interface ImportSkillSelection {
+  directory: string;
+  apps: SkillApps;
+}
+
+export interface SkillsShDiscoverableSkill {
+  key: string;
+  name: string;
+  directory: string;
+  repoOwner: string;
+  repoName: string;
+  repoBranch: string;
+  installs: number;
+  readmeUrl?: string;
+}
+
+export interface SkillsShSearchResult {
+  skills: SkillsShDiscoverableSkill[];
+  totalCount: number;
+  query: string;
+}
+
+export interface MigrationResult {
+  migratedCount: number;
+  skippedCount: number;
+  errors: string[];
+}
+
+export type AppType = 'claude' | 'codex' | 'gemini' | 'opencode' | 'hermes';
+export type SkillStorageLocation = 'cc_switch' | 'unified';
+
+export interface McpApps {
+  claude: boolean;
+  codex: boolean;
+  gemini: boolean;
+  opencode: boolean;
+  hermes: boolean;
+}
+
+export interface McpServer {
+  id: string;
+  name: string;
+  server: Record<string, unknown>;
+  apps: McpApps;
+  description?: string;
+  homepage?: string;
+  docs?: string;
+  tags?: string[];
 }
 
 export class CCSwitchClient {
@@ -178,7 +299,9 @@ export class CCSwitchClient {
 
   private async readStartupMessage(): Promise<ProxyInfo> {
     const stdout = this.proc!.stdout;
-    if (!stdout) {
+    // bun 的 Subprocess.stdout 类型为 number | ReadableStream | undefined
+    // （number = 原始 fd）；spawn(stdout: 'pipe') 运行时恒为 ReadableStream
+    if (stdout == null || typeof stdout === 'number') {
       throw new Error('Failed to open stdout pipe');
     }
 
