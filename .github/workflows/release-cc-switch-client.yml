@@ -172,8 +172,8 @@ jobs:
           NPM_DIR="cc-switch-server/npm"
           echo "=== Package contents ==="
           for pkg_dir in "$NPM_DIR"/cc-switch-client-*; do
-            name=$(node -e "console.log(require('$pkg_dir/package.json').name)")
-            version=$(node -e "console.log(require('$pkg_dir/package.json').version)")
+            name=$(node -e "console.log(JSON.parse(require('fs').readFileSync('$pkg_dir/package.json','utf8')).name)")
+            version=$(node -e "console.log(JSON.parse(require('fs').readFileSync('$pkg_dir/package.json','utf8')).version)")
             binary=$(find "$pkg_dir/bin" -type f 2>/dev/null | head -1)
             if [ -n "$binary" ]; then
               echo "  ✅ $name@$version → $(du -h "$binary" | cut -f1)"
@@ -193,7 +193,7 @@ jobs:
           # Publish each platform package that has a binary
           for pkg_dir in "$NPM_DIR"/cc-switch-client-*; do
             if find "$pkg_dir/bin" -type f 2>/dev/null | head -1 | grep -q .; then
-              name=$(node -e "console.log(require('$pkg_dir/package.json').name)")
+              name=$(node -e "console.log(JSON.parse(require('fs').readFileSync('$pkg_dir/package.json','utf8')).name)")
               echo "Publishing $name..."
               (cd "$pkg_dir" && npm publish --access public) || echo "WARN: Failed to publish $name"
             fi
