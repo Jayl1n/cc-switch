@@ -8,7 +8,7 @@
 
 use std::sync::Arc;
 
-use axum::routing::get;
+use axum::routing::{delete, get};
 use axum::Router;
 use cc_switch_core::store::AppState;
 
@@ -30,6 +30,14 @@ pub fn router(app_state: Arc<AppState>) -> Router {
         .route("/api/v1/health", get(health))
         .nest("/api/v1/skills", skills::routes())
         .nest("/api/v1/mcp", mcp::routes())
+        .route(
+            "/api/v1/skill-repos",
+            get(skills::list_repos).post(skills::add_repo),
+        )
+        .route(
+            "/api/v1/skill-repos/:owner/:name",
+            delete(skills::remove_repo),
+        )
         .with_state(ApiState { app_state })
 }
 

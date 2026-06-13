@@ -66,3 +66,36 @@ async fn skills_list_returns_array() {
     let body: serde_json::Value = resp.json().await.unwrap();
     assert!(body.is_array(), "expected array, got: {body}");
 }
+
+#[tokio::test]
+#[serial]
+async fn skills_unmanaged_returns_array() {
+    let srv = spawn_api().await;
+    let resp = reqwest::get(format!("{}/api/v1/skills/unmanaged", srv.base_url))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 200);
+    assert!(resp.json::<serde_json::Value>().await.unwrap().is_array());
+}
+
+#[tokio::test]
+#[serial]
+async fn skills_backups_returns_array() {
+    let srv = spawn_api().await;
+    let resp = reqwest::get(format!("{}/api/v1/skills/backups", srv.base_url))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 200);
+    assert!(resp.json::<serde_json::Value>().await.unwrap().is_array());
+}
+
+#[tokio::test]
+#[serial]
+async fn skill_repos_returns_array() {
+    let srv = spawn_api().await;
+    let resp = reqwest::get(format!("{}/api/v1/skill-repos", srv.base_url))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 200);
+    assert!(resp.json::<serde_json::Value>().await.unwrap().is_array());
+}
