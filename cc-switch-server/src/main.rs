@@ -12,6 +12,7 @@
 //! Outputs JSON status to stdout, then blocks until SIGTERM/SIGINT.
 
 use cc_switch_core::{Core, NoopAuthProvider, NoopEvents};
+use cc_switch_server::router as mgmt_router;
 use clap::Parser;
 use std::sync::Arc;
 
@@ -104,6 +105,22 @@ async fn run_server(args: Args) {
         std::process::exit(1);
     });
 
+    // ── mgmt API（/api/v1/）：仅 127.0.0.1，随机端口 ──
+    let mgmt_listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("Failed to bind management API port");
+    let mgmt_port = mgmt_listener
+        .local_addr()
+        .expect("Failed to get management API port")
+        .port();
+    let mgmt_app = mgmt_router(core.state.clone());
+    tokio::spawn(async move {
+        if let Err(e) = axum::serve(mgmt_listener, mgmt_app).await {
+            log::error!("Management API server error: {e}");
+        }
+    });
+    log::info!("Management API listening on 127.0.0.1:{mgmt_port}");
+
     // Output status to stdout (for the parent process to read)
     let status = serde_json::json!({
         "status": "running",
@@ -111,6 +128,7 @@ async fn run_server(args: Args) {
         "port": info.port,
         "started_at": info.started_at,
         "takeover": args.takeover,
+        "mgmtPort": mgmt_port,
     });
 
     if args.output == "json" {
