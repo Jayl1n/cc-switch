@@ -24,6 +24,31 @@
  * npm install cc-switch-client
  * ```
  *
+ * ## Management API
+ *
+ * Besides the proxy, the server exposes a localhost-only management API on
+ * an independent port (`info.mgmtPort`). The typed methods below let you manage
+ * Skills and MCP servers directly, mirroring `cc-switch-core` services:
+ *
+ * ```ts
+ * // Skills — install / list / toggle / update
+ * const skills = await client.listSkills();                    // InstalledSkill[]
+ * const installed = await client.installSkill(skill, 'claude');
+ * await client.toggleSkillApp(installed.id, 'codex', true);
+ * await client.updateSkill(installed.id);
+ *
+ * // Skill discovery & storage
+ * const repos = await client.listSkillRepos();                 // SkillRepo[]
+ * const hits = await client.searchSkills('pdf');               // SkillsShSearchResult
+ * await client.migrateSkillStorage('unified');                 // MigrationResult
+ *
+ * // MCP servers — CRUD + sync + import
+ * const servers = await client.listMcpServers();               // McpServer[]
+ * await client.upsertMcpServer(server);
+ * await client.syncMcp();                                      // sync enabled → all apps
+ * const n = await client.importMcpFromApp('codex');            // import existing config
+ * ```
+ *
  * The correct binary for your platform is installed automatically.
  */
 
