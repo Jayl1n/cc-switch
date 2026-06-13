@@ -116,3 +116,85 @@ describe('CCSwitchClient', () => {
     expect(() => client.getProxyUrl()).toThrow('not started');
   });
 });
+
+describe('CCSwitchClient management API', () => {
+  test('ProxyInfo exposes independent mgmtPort', async () => {
+    const client = new CCSwitchClient({
+      configDir: makeConfigDir(),
+      port: 0,
+      logLevel: 'warn',
+    });
+    const info = await client.start();
+    expect(info.mgmtPort).toBeGreaterThan(0);
+    // 管理端口与代理端口是两个独立的 OS 分配端口
+    expect(info.mgmtPort).not.toBe(info.port);
+    await client.stop();
+  });
+
+  test('list endpoints return arrays on empty config', async () => {
+    const client = new CCSwitchClient({
+      configDir: makeConfigDir(),
+      port: 0,
+      logLevel: 'warn',
+    });
+    await client.start();
+
+    expect(await client.listSkills()).toEqual([]);
+    expect(Array.isArray(await client.listUnmanagedSkills())).toBe(true);
+    expect(await client.listSkillBackups()).toEqual([]);
+    expect(Array.isArray(await client.listSkillRepos())).toBe(true);
+    expect(Array.isArray(await client.listMcpServers())).toBe(true);
+
+    await client.stop();
+  });
+
+  test('mcp sync/import are safe on empty config', async () => {
+    const client = new CCSwitchClient({
+      configDir: makeConfigDir(),
+      port: 0,
+      logLevel: 'warn',
+    });
+    await client.start();
+
+    await client.syncMcp(); // 空配置，不抛错
+    const imported = await client.importMcpFromApp('claude');
+    expect(typeof imported).toBe('number');
+
+    await client.stop();
+  });
+
+  test('migrateSkillStorage to current target is no-op', async () => {
+    const client = new CCSwitchClient({
+      configDir: makeConfigDir(),
+      port: 0,
+      logLevel: 'warn',
+    });
+    await client.start();
+
+    // 默认存储位置即 cc_switch，迁移到同位置 → 0 迁移
+    const result = await client.migrateSkillStorage('cc_switch');
+    expect(result.migratedCount).toBe(0);
+
+    await client.stop();
+  });
+
+  test('checkSkillUpdates returns array', async () => {
+    const client = new CCSwitchClient({
+      configDir: makeConfigDir(),
+      port: 0,
+      logLevel: 'warn',
+    });
+    await client.start();
+
+    const updates = await client.checkSkillUpdates();
+    expect(Array.isArray(updates)).toBe(true);
+
+    await client.stop();
+  });
+
+  test('management methods reject before start', async () => {
+    const client = new CCSwitchClient({ configDir: makeConfigDir() });
+    // mgmtUrl 在 proxyInfo 为空时抛错；async 方法将其转为 rejected promise
+    await expect(client.listSkills()).rejects.toThrow('not started');
+  });
+});
