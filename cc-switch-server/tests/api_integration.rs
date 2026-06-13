@@ -131,3 +131,32 @@ async fn skills_install_creates_entry() {
     }
     assert_eq!(status, 200);
 }
+
+#[tokio::test]
+#[serial]
+async fn skills_toggle_app_missing_returns_error() {
+    let srv = spawn_api().await;
+    let client = reqwest::Client::new();
+    let body = serde_json::json!({ "app": "claude", "enabled": false });
+    let resp = client
+        .post(format!("{}/api/v1/skills/nonexistent/toggle", srv.base_url))
+        .json(&body)
+        .send()
+        .await
+        .unwrap();
+    // SkillService::toggle_app 对不存在的 id 返回 anyhow error → 500
+    assert_eq!(resp.status(), 500);
+}
+
+#[tokio::test]
+#[serial]
+async fn skills_uninstall_missing_returns_error() {
+    let srv = spawn_api().await;
+    let client = reqwest::Client::new();
+    let resp = client
+        .delete(format!("{}/api/v1/skills/nonexistent", srv.base_url))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 500);
+}

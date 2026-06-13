@@ -1,12 +1,14 @@
 //! Skill 管理端点。薄转发到 cc_switch_core::services::skill::SkillService。
 
 use axum::extract::{Path, State};
-use axum::routing::{get, post};
+use axum::routing::{delete, get, post};
 use axum::{Json, Router};
 use serde::Deserialize;
 
 use cc_switch_core::app_config::{AppType, InstalledSkill, UnmanagedSkill};
-use cc_switch_core::services::skill::{DiscoverableSkill, SkillBackupEntry, SkillRepo, SkillService};
+use cc_switch_core::services::skill::{
+    DiscoverableSkill, SkillBackupEntry, SkillRepo, SkillService, SkillUninstallResult,
+};
 
 use super::{ApiResult, ApiState};
 
@@ -16,6 +18,8 @@ pub fn routes() -> Router<ApiState> {
         .route("/install", post(install))
         .route("/unmanaged", get(scan_unmanaged))
         .route("/backups", get(list_backups))
+        .route("/:id", delete(uninstall))
+        .route("/:id/toggle", post(toggle_app))
 }
 
 async fn list(State(state): State<ApiState>) -> ApiResult<Json<Vec<InstalledSkill>>> {
@@ -40,6 +44,35 @@ async fn install(
     let svc = SkillService::new();
     let installed = svc.install(&db, &req.skill, &req.app).await?;
     Ok(Json(installed))
+}
+
+async fn uninstall(
+    State(state): State<ApiState>,
+    Path(id): Path<String>,
+) -> ApiResult<Json<SkillUninstallResult>> {
+    let db = state.app_state.db.clone();
+    let result = tokio::task::spawn_blocking(move || SkillService::uninstall(&db, &id))
+        .await
+        .map_err(anyhow::Error::from)??;
+    Ok(Json(result))
+}
+
+#[derive(Deserialize)]
+struct ToggleRequest {
+    app: AppType,
+    enabled: bool,
+}
+
+async fn toggle_app(
+    State(state): State<ApiState>,
+    Path(id): Path<String>,
+    Json(req): Json<ToggleRequest>,
+) -> ApiResult<Json<()>> {
+    let db = state.app_state.db.clone();
+    tokio::task::spawn_blocking(move || SkillService::toggle_app(&db, &id, &req.app, req.enabled))
+        .await
+        .map_err(anyhow::Error::from)??;
+    Ok(Json(()))
 }
 
 async fn scan_unmanaged(State(state): State<ApiState>) -> ApiResult<Json<Vec<UnmanagedSkill>>> {
