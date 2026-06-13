@@ -207,3 +207,42 @@ async fn skills_migrate_storage_idempotent() {
     // 目标==当前（default CcSwitch）时 migrate_storage 直接返回 0 迁移（skill.rs:1157）
     assert_eq!(resp.status(), 200);
 }
+
+#[tokio::test]
+#[serial]
+async fn mcp_servers_list_returns_array() {
+    let srv = spawn_api().await;
+    let resp = reqwest::get(format!("{}/api/v1/mcp/servers", srv.base_url))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 200);
+    assert!(resp.json::<serde_json::Value>().await.unwrap().is_array());
+}
+
+#[tokio::test]
+#[serial]
+async fn mcp_sync_returns_ok() {
+    let srv = spawn_api().await;
+    let client = reqwest::Client::new();
+    let resp = client
+        .post(format!("{}/api/v1/mcp/sync", srv.base_url))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 200);
+}
+
+#[tokio::test]
+#[serial]
+async fn mcp_import_claude_returns_number() {
+    let srv = spawn_api().await;
+    let client = reqwest::Client::new();
+    let resp = client
+        .post(format!("{}/api/v1/mcp/import/claude", srv.base_url))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 200);
+    // handler 返回 Json<usize>（导入条数），tempdir 无配置时为 0
+    assert!(resp.json::<serde_json::Value>().await.unwrap().is_number());
+}
