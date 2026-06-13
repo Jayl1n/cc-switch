@@ -30,6 +30,9 @@
 import { spawn, type Subprocess } from 'bun';
 import { resolveBinaryPath } from './detect-platform';
 
+/** encodeURIComponent 别名，用于管理 API 路径参数编码。 */
+const enc = encodeURIComponent;
+
 export interface CCSwitchConfig {
   /** Path to cc-switch-server binary (default: auto-detect from platform package) */
   binaryPath?: string;
@@ -275,6 +278,156 @@ export class CCSwitchClient {
       this.proc = null;
       this.proxyInfo = null;
     }
+  }
+
+  // ── Management API（/api/v1/，端口来自 ProxyInfo.mgmtPort）──
+
+  /** 列出所有已安装 Skill。 */
+  listSkills(): Promise<InstalledSkill[]> {
+    return this.mgmtFetch<InstalledSkill[]>('/skills');
+  }
+
+  /** 扫描各 app 目录下、未由 cc-switch 管理的 Skill。 */
+  listUnmanagedSkills(): Promise<UnmanagedSkill[]> {
+    return this.mgmtFetch<UnmanagedSkill[]>('/skills/unmanaged');
+  }
+
+  /** 列出所有 Skill 备份。 */
+  listSkillBackups(): Promise<SkillBackupEntry[]> {
+    return this.mgmtFetch<SkillBackupEntry[]>('/skills/backups');
+  }
+
+  /** 列出已注册的 Skill 仓库。 */
+  listSkillRepos(): Promise<SkillRepo[]> {
+    return this.mgmtFetch<SkillRepo[]>('/skill-repos');
+  }
+
+  /** 从仓库安装一个 Skill 到指定 app。 */
+  installSkill(skill: DiscoverableSkill, app: AppType): Promise<InstalledSkill> {
+    return this.mgmtPost<InstalledSkill>('/skills/install', { skill, app });
+  }
+
+  /** 从本地 zip 文件安装 Skill（path 为同机绝对路径）。 */
+  installSkillFromZip(path: string, app: AppType): Promise<InstalledSkill[]> {
+    return this.mgmtPost<InstalledSkill[]>('/skills/install-zip', { path, app });
+  }
+
+  /** 卸载 Skill（返回备份路径，若有）。 */
+  uninstallSkill(id: string): Promise<SkillUninstallResult> {
+    return this.mgmtDelete<SkillUninstallResult>(`/skills/${enc(id)}`);
+  }
+
+  /** 启用/禁用 Skill 在某 app 的同步。 */
+  toggleSkillApp(id: string, app: AppType, enabled: boolean): Promise<void> {
+    return this.mgmtPost<void>(`/skills/${enc(id)}/toggle`, { app, enabled });
+  }
+
+  /** 检查所有已安装 Skill 的远程更新。 */
+  checkSkillUpdates(): Promise<SkillUpdateInfo[]> {
+    return this.mgmtPost<SkillUpdateInfo[]>('/skills/check-updates');
+  }
+
+  /** 更新单个 Skill 到最新版。 */
+  updateSkill(id: string): Promise<InstalledSkill> {
+    return this.mgmtPost<InstalledSkill>(`/skills/${enc(id)}/update`);
+  }
+
+  /** 批量导入已有 Skill（按 directory + apps 选择）。 */
+  importSkills(imports: ImportSkillSelection[]): Promise<InstalledSkill[]> {
+    return this.mgmtPost<InstalledSkill[]>('/skills/import', { imports });
+  }
+
+  /** 迁移 Skill 存储位置。 */
+  migrateSkillStorage(target: SkillStorageLocation): Promise<MigrationResult> {
+    return this.mgmtPost<MigrationResult>('/skills/migrate-storage', { target });
+  }
+
+  /** 在 skills.sh 搜索 Skill。 */
+  searchSkills(query: string, limit = 20, offset = 0): Promise<SkillsShSearchResult> {
+    return this.mgmtPost<SkillsShSearchResult>('/skills/search', { query, limit, offset });
+  }
+
+  /** 删除一个 Skill 备份。 */
+  deleteSkillBackup(backupId: string): Promise<void> {
+    return this.mgmtDelete<void>(`/skills/backups/${enc(backupId)}`);
+  }
+
+  /** 从备份恢复 Skill 到指定 app。 */
+  restoreSkillBackup(backupId: string, app: AppType): Promise<InstalledSkill> {
+    return this.mgmtPost<InstalledSkill>(`/skills/backups/${enc(backupId)}/restore`, { app });
+  }
+
+  /** 添加一个 Skill 仓库。 */
+  addSkillRepo(repo: SkillRepo): Promise<void> {
+    return this.mgmtPost<void>('/skill-repos', repo);
+  }
+
+  /** 移除一个 Skill 仓库。 */
+  removeSkillRepo(owner: string, name: string): Promise<void> {
+    return this.mgmtDelete<void>(`/skill-repos/${enc(owner)}/${enc(name)}`);
+  }
+
+  // ── MCP ──
+
+  /** 列出所有 MCP server 配置。 */
+  listMcpServers(): Promise<McpServer[]> {
+    return this.mgmtFetch<McpServer[]>('/mcp/servers');
+  }
+
+  /** 新增/更新一个 MCP server 配置。 */
+  upsertMcpServer(server: McpServer): Promise<void> {
+    return this.mgmtPost<void>('/mcp/servers', server);
+  }
+
+  /** 删除一个 MCP server，返回是否已移除。 */
+  deleteMcpServer(id: string): Promise<boolean> {
+    return this.mgmtDelete<boolean>(`/mcp/servers/${enc(id)}`);
+  }
+
+  /** 启用/禁用 MCP server 在某 app 的同步。 */
+  toggleMcpApp(id: string, app: AppType, enabled: boolean): Promise<void> {
+    return this.mgmtPost<void>(`/mcp/servers/${enc(id)}/toggle`, { app, enabled });
+  }
+
+  /** 将所有启用的 MCP 配置同步到各 app。 */
+  syncMcp(): Promise<void> {
+    return this.mgmtPost<void>('/mcp/sync');
+  }
+
+  /** 从某 app 的现有配置导入 MCP server（返回导入条数）。 */
+  importMcpFromApp(app: AppType): Promise<number> {
+    return this.mgmtPost<number>(`/mcp/import/${enc(app)}`);
+  }
+
+  // ── Management API 内部辅助 ──
+
+  private mgmtUrl(path: string): string {
+    if (!this.proxyInfo) {
+      throw new Error('Proxy not started. Call start() first.');
+    }
+    return `http://${this.proxyInfo.address}:${this.proxyInfo.mgmtPort}/api/v1${path}`;
+  }
+
+  private async mgmtFetch<T>(path: string, init?: RequestInit): Promise<T> {
+    const res = await fetch(this.mgmtUrl(path), init);
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      throw new Error(`mgmt API ${path} failed: HTTP ${res.status} ${body}`);
+    }
+    const text = await res.text();
+    return (text ? JSON.parse(text) : null) as T;
+  }
+
+  private mgmtPost<T>(path: string, body?: unknown): Promise<T> {
+    return this.mgmtFetch<T>(path, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+  }
+
+  private mgmtDelete<T>(path: string): Promise<T> {
+    return this.mgmtFetch<T>(path, { method: 'DELETE' });
   }
 
   // ── Private helpers ──
