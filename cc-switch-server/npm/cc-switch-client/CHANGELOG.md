@@ -3,6 +3,23 @@
 `cc-switch-client` 所有显著变更记录于此。
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.1.2] - 2026-06-23
+
+本次同步上游 `cc-switch-core` 源码（v3.16.3），将桌面端核心模块的修复与新功能回流到独立 `cc-switch-server` 二进制。
+
+### Added
+- **Codex 统一会话历史开关**：官方 Codex 供应商的 live 配置在落盘前注入共享 `custom` 路由，开关即时生效（无需等下次切换）。新增 `inject/strip/apply_codex_unified_session_bucket` 及对应的会话历史迁移引擎（`codex_history_migration.rs`）。
+- **新增 `reapply_current_codex_official_live`**：统一会话开关变更后立即重写当前官方 Codex 供应商的 live 配置。
+- **MCP 路径推导重构**：`get_claude_mcp_path` 支持词法规范化路径比较，并在 Windows WSL UNC 默认目录下使用拆分式 `.claude.json` 路径。
+- 将 `CHANGELOG.md` 纳入 npm 发布文件列表（`package.json` 的 `files` 字段）。
+
+### Fixed
+- **Codex 系供应商接管保留 `ANTHROPIC_AUTH_TOKEN` 占位符**（#3784）：`ManagedAccount` 接管策略新增 `keep_auth_token` 标志，Codex 系（含仅凭 base_url 识别的）注入占位符避免 Claude Code 弹登录提示；Copilot 维持仅 `API_KEY` 占位（#1049）。
+- Volcengine Ark 用量查询（AK/SK 签名）、Chat API 跳过缺失函数名的 tool call、Codex OAuth auth token 在 takeover 时保留（#3789）等多项上游修复同步回流。
+
+### Changed
+- 同步 104 个未改动文件 + 22 个上游改动文件到 `cc-switch-core`；13 个解耦文件（去 Tauri 依赖）重新应用机械替换规则并手动 review。
+
 ## [0.1.1] - 2026-06-13
 
 ### Added

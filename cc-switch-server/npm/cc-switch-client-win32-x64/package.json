@@ -1,6 +1,6 @@
 {
   "name": "cc-switch-client-win32-x64",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "cc-switch-server binary for Windows x64",
   "license": "MIT",
   "os": [
