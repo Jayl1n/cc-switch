@@ -46,6 +46,14 @@ struct Args {
 }
 
 fn main() {
+    // Install the ring CryptoProvider as the process default BEFORE any TLS
+    // operation. Without this, rustls 0.23's no-arg ClientConfig::builder()
+    // (used by the proxy's TLS connector and reqwest) panics with
+    // "no process-level CryptoProvider available" on the first HTTPS upstream
+    // request. The Tauri desktop app does the same in src-tauri/src/lib.rs.
+    // (Best-effort: if another component already installed a provider, ignore.)
+    let _ = rustls::crypto::ring::default_provider().install_default();
+
     let args = Args::parse();
 
     // Initialize logger (writes to stderr so stdout stays clean for JSON protocol)

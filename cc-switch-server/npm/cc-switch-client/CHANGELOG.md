@@ -3,6 +3,24 @@
 `cc-switch-client` 所有显著变更记录于此。
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.1.4] - 2026-06-27
+
+同步上游 `cc-switch-core` v3.16.4，并修复 headless 二进制的 rustls TLS panic。
+
+### Fixed
+- **rustls CryptoProvider panic**（关键修复）：`cc-switch-server` 转发 HTTPS 上游请求时，因未安装进程级 CryptoProvider，rustls 0.23 的无参 `ClientConfig::builder()` panic（"no process-level CryptoProvider available"），导致连接断开 → 502 fetch failed。现在：
+  - `hyper_client.rs` 改用 `builder_with_provider(ring)` 显式指定 provider（自包含，不依赖外部 install）。
+  - `main.rs` 启动时 `install_default()`（对齐桌面端），覆盖 reqwest/hyper-rustls 等所有 TLS 路径。
+- **上游 zstd 解压**（#3817）：上游压缩的错误响应体现在能正确解压，不再因 `from_utf8` 失败而丢失限流/鉴权等错误详情。
+
+### Added
+- **本地代理请求覆盖**（#4589）：供应商支持 `local_proxy_request_overrides` 自定义请求头和请求体（深度合并），含保护字段白名单（authorization、content-type 等不可覆盖）、`stream` 字段保护、Copilot 跳过。
+- **统一解压模块** `proxy/content_encoding.rs`（gzip/deflate/zstd），forwarder 与 response_processor 共用。
+- 新增 `zstd = "0.13"` 依赖。
+
+### Changed
+- 同步上游 v3.16.4 的 118 个未改动文件 + provider.rs（`LocalProxyRequestOverrides` 类型）+ database/mod.rs 等。
+
 ## [0.1.3] - 2026-06-24
 
 本次同步上游 `cc-switch-core` 源码（v3.16.3），将桌面端核心模块的修复与新功能回流到独立 `cc-switch-server` 二进制。

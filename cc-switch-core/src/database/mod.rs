@@ -44,32 +44,6 @@ use crate::error::AppError;
 use rusqlite::{hooks::Action, Connection};
 use serde::Serialize;
 use std::sync::Mutex;
-use std::sync::OnceLock;
-
-/// 全局数据库变更通知回调。
-///
-/// 外部模块（如 webdav_auto_sync, s3_auto_sync）通过 `register_db_change_callback`
-/// 注册回调函数。Database 的 SQLite update hook 会调用所有已注册的回调。
-/// 这解耦了 database 模块对具体 sync 服务的直接依赖。
-static DB_CHANGE_CALLBACKS: OnceLock<Vec<fn(&str)>> = OnceLock::new();
-
-/// 注册数据库变更回调函数。
-///
-/// 必须在 `Database::init()` 之前调用。可多次调用以追加回调。
-/// 如果在 `Database::init()` 之后调用，回调将不会生效。
-pub fn register_db_change_callback(callback: fn(&str)) {
-    DB_CHANGE_CALLBACKS.get_or_init(|| {
-        vec![callback]
-    });
-}
-
-/// 追加额外的回调到已注册的回调列表。
-///
-/// 因为 `OnceLock` 只能设置一次，我们用一个固定的 2-slot Vec，
-/// 在 core 初始化时一次性注册 webdav 和 s3 两个回调。
-pub fn set_db_change_callbacks(callbacks: Vec<fn(&str)>) {
-    let _ = DB_CHANGE_CALLBACKS.set(callbacks);
-}
 
 // DAO 方法通过 impl Database 提供，无需额外导出
 
@@ -107,11 +81,8 @@ fn register_db_change_hook(conn: &Connection) {
     conn.update_hook(Some(
         |action: Action, _database: &str, table: &str, _row_id: i64| match action {
             Action::SQLITE_INSERT | Action::SQLITE_UPDATE | Action::SQLITE_DELETE => {
-                if let Some(callbacks) = DB_CHANGE_CALLBACKS.get() {
-                    for cb in callbacks {
-                        cb(table);
-                    }
-                }
+                crate::services::webdav_auto_sync::notify_db_changed(table);
+                crate::services::s3_auto_sync::notify_db_changed(table);
             }
             _ => {}
         },
@@ -186,6 +157,22 @@ impl Database {
         }
 
         Ok(db)
+    }
+
+    /// 读取磁盘上数据库的 `user_version`；仅当它比应用支持的 [`SCHEMA_VERSION`]
+    /// 更新时返回 `Some(version)`。
+    ///
+    /// 用于初始化失败后判断是否为「数据库版本过新（应用过旧，需升级应用）」的可恢复
+    /// 场景——此时不应反复弹出无效的重试对话框，而应引导用户在应用内升级。
+    pub fn stored_user_version_exceeds_supported(
+        db_path: &std::path::Path,
+    ) -> Result<Option<i32>, AppError> {
+        if !db_path.exists() {
+            return Ok(None);
+        }
+        let conn = Connection::open(db_path).map_err(|e| AppError::Database(e.to_string()))?;
+        let version = Self::get_user_version(&conn)?;
+        Ok((version > SCHEMA_VERSION).then_some(version))
     }
 
     /// 创建内存数据库（用于测试）

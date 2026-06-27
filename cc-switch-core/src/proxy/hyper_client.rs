@@ -556,9 +556,21 @@ fn global_tls_connector() -> &'static tokio_rustls::TlsConnector {
         let native = rustls_native_certs::load_native_certs();
         let (added, _errors) = root_store.add_parsable_certificates(native.certs);
         log::debug!("[HyperClient] TLS root store: webpki + {added} native certs");
-        let config = rustls::ClientConfig::builder()
-            .with_root_certificates(root_store)
-            .with_no_client_auth();
+        // NOTE: use builder_with_provider(ring) instead of the no-arg builder().
+        // The no-arg ClientConfig::builder() panics at runtime with
+        // "no process-level CryptoProvider available" unless something has called
+        // CryptoProvider::install_default() first. The Tauri desktop app installs
+        // it in src-tauri/src/lib.rs, but cc-switch-server (headless binary) does
+        // not, so building the TLS connector here would panic on the first HTTPS
+        // request. Passing the ring provider explicitly is self-contained and
+        // safe regardless of process-default state.
+        let config = rustls::ClientConfig::builder_with_provider(
+            std::sync::Arc::new(rustls::crypto::ring::default_provider()),
+        )
+        .with_safe_default_protocol_versions()
+        .expect("ring provider supports TLS 1.2/1.3 defaults")
+        .with_root_certificates(root_store)
+        .with_no_client_auth();
         tokio_rustls::TlsConnector::from(std::sync::Arc::new(config))
     })
 }
@@ -735,5 +747,51 @@ impl<S: Unpin> tokio::io::AsyncWrite for WriteFilter<S> {
         _cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<std::io::Result<()>> {
         std::task::Poll::Ready(Ok(()))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Regression: `global_tls_connector()` must build without relying on a
+    /// process-level CryptoProvider. The old code used the no-arg
+    /// `rustls::ClientConfig::builder()`, which panics at runtime with
+    /// "no process-level CryptoProvider available" unless a default provider
+    /// was installed first. The Tauri desktop app installs one in
+    /// `src-tauri/src/lib.rs`, but `cc-switch-server` (headless) does not, so
+    /// the first HTTPS upstream request panicked → 502 fetch failed.
+    ///
+    /// This test calls the fixed connector builder directly. It must NOT panic
+    /// even when no process-default CryptoProvider is installed. (If the bug
+    /// regressed to the no-arg builder, this would panic inside get_or_init.)
+    #[test]
+    fn tls_connector_builds_without_process_default_provider() {
+        let connector = global_tls_connector();
+        // Sanity: it's a usable TlsConnector (not the Dummy type).
+        let _ = tokio_rustls::TlsConnector::clone(connector);
+    }
+
+    /// Documents the old failure mode: the no-arg builder path is *expected*
+    /// to panic here because cc-switch-core never installs a process-default
+    /// CryptoProvider. If a default IS installed (e.g. another test or the host
+    /// binary did so), this test is skipped via a runtime guard rather than
+    /// reported as a failure — the real protection is the explicit ring
+    /// provider in `global_tls_connector`, covered by the test above.
+    #[test]
+    fn no_arg_builder_panics_without_process_default() {
+        // If a process default is already installed, there's nothing to assert
+        // about the no-arg path — bail out gracefully.
+        if rustls::crypto::CryptoProvider::get_default().is_some() {
+            return; // environment guarantees a provider; nothing to test
+        }
+        let result = std::panic::catch_unwind(|| {
+            let _ = rustls::ClientConfig::builder();
+        });
+        assert!(
+            result.is_err(),
+            "no-arg ClientConfig::builder() should panic when no process-default \
+             CryptoProvider is installed (this is the bug being guarded against)"
+        );
     }
 }

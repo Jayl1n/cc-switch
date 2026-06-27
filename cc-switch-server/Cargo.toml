@@ -24,6 +24,9 @@ axum = "0.7"
 tower-http = { version = "0.5", features = ["cors", "trace"] }
 anyhow = "1.0"
 thiserror = "2.0"
+# TLS: install ring CryptoProvider as process default at startup (see main.rs).
+# Must match cc-switch-core's rustls feature set to avoid duplicate providers.
+rustls = { version = "0.23", default-features = false, features = ["ring"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 # CI 用 cross 容器交叉编译 Linux ARM64 时，容器缺 target 架构的 libssl-dev，
